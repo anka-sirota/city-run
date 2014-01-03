@@ -1,5 +1,5 @@
 import helpers
-bgl = helpers.GameLogic
+bgl = helpers.bgl
 gdict = bgl.globalDict
 DELTA = 5.0
 

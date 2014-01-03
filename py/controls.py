@@ -6,21 +6,35 @@ ACTIVATED = G.KX_INPUT_JUST_ACTIVATED
 RELEASED = G.KX_INPUT_JUST_RELEASED
 ACTIVE = G.KX_INPUT_ACTIVE
 INACTIVE = G.KX_INPUT_NONE
-from helpers import get_object
-DEBUG = True
+from helpers import get_object, search_object
 mouse = G.mouse
 mouse_events = mouse.events
 keyboard = G.keyboard
 
-cont = G.getCurrentController()
-camera = get_object("camera")
-yaw = get_object("player_yaw")
-ply = cont.owner
-print("Setting up the camera")
-yaw.setParent(ply, False)
-camera.setParent(yaw, False)
-camera.position = (0, 0, 0)
-G.getCurrentScene().active_camera = camera
+
+def open_menu():
+    scene.suspend()
+    G.addScene('HUD', 1)
+    camera['focalDepth'] = 0.1
+    menu = search_object('hud_menu')
+    if menu:
+        menu.setVisible(True, True)
+        scenes = {_.name: _ for _ in G.getSceneList()}
+        scenes['HUD'].resume()
+
+
+def start_game():
+    scenes = {_.name: _ for _ in G.getSceneList()}
+    scenes['HUD'].suspend()
+    scene.resume()
+    menu = search_object('hud_menu')
+    menu.setVisible(False, True)
+    camera['focalDepth'] = 1.0
+    print('Setting up the camera')
+    yaw.setParent(ply, False)
+    camera.setParent(yaw, False)
+    camera.position = (0, 0, 0)
+    scene.active_camera = camera
 
 
 def mouse_look(cont):
@@ -36,18 +50,18 @@ def mouse_look(cont):
     smooth = 0.7			# mouse smoothing (0.0 - 0.99)
 
     owner = cont.owner
-    Mouse = cont.sensors["Mouse"]
+    Mouse = cont.sensors['Mouse']
 
     w = R.getWindowWidth()//2
     h = R.getWindowHeight()//2
     screen_center = (w, h)
 
     # center mouse on first frame, create temp variables
-    if "oldX" not in owner:
-        print("oldX" not in owner)
+    if 'oldX' not in owner:
+        print('oldX' not in owner)
         R.setMousePosition(w + 1, h + 1)
-        owner["oldX"] = 0.0
-        owner["oldY"] = 0.0
+        owner['oldX'] = 0.0
+        owner['oldY'] = 0.0
     else:
 
         scrc = Vector(screen_center)
@@ -78,8 +92,12 @@ def mouse_look(cont):
     kbright = events.DKEY  # An example would be 'events.WKEY, DKEY, SKEY, and AKEY
     kbup = events.WKEY
     kbdown = events.SKEY
+    kb_q = events.QKEY
 
     ##################
+
+    if keyboard[kb_q]:
+        open_menu()
 
     if not 'moveinit' in owner:
         owner['moveinit'] = 1
@@ -122,9 +140,17 @@ def mouse_look(cont):
 def change_focus(cont):
     #if mousewheel moves down, bring focus closer
     if G.mouse.events[events.WHEELDOWNMOUSE] in (ACTIVE, ACTIVATED):
-        camera["focalDepth"] -= 0.005
+        camera['focalDepth'] -= 0.005
     #if mousewheel moves up, make focus further
     if G.mouse.events[events.WHEELUPMOUSE] in (ACTIVE, ACTIVATED):
-        camera["focalDepth"] += 0.005
-    camera["focalDepth"] = camera["focalDepth"] < 0.1 and 0.1 or camera["focalDepth"]
-    camera["focalDepth"] = camera["focalDepth"] > 1.0 and 1.0 or camera["focalDepth"]
+        camera['focalDepth'] += 0.005
+    camera['focalDepth'] = camera['focalDepth'] < 0.1 and 0.1 or camera['focalDepth']
+    camera['focalDepth'] = camera['focalDepth'] > 1.0 and 1.0 or camera['focalDepth']
+
+scene = G.getCurrentScene()
+if scene.name == 'City':
+    camera = get_object('camera')
+    cont = G.getCurrentController()
+    yaw = get_object('player_yaw')
+    ply = cont.owner
+    open_menu()
