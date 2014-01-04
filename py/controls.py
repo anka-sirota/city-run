@@ -23,17 +23,22 @@ def start_game(walk=False):
     print('Setting up the camera')
     yaw.setParent(ply, False)
     camera.setParent(yaw, False)
-    camera.position = (0, 0, 0)
     scene.active_camera = camera
-    if walk:
+    if walk and movement_controls.can_fly:
         movement_controls.can_fly = False
         movement_controls.maxspd = 5.0
         movement_controls.sensitivity = 0.002
+    elif not walk and not movement_controls.can_fly:
+        movement_controls.init_fly_settings()
+    movement_controls.view_toggle(True)
 
 
 class MovementControl(object):
     def __init__(self):
         print('MovementControl', scene)
+        self.init_fly_settings()
+
+    def init_fly_settings(self):
         self.update_screen_size()
         #self.speed = 0.08
         self.sensitivity = 0.0005
@@ -54,6 +59,16 @@ class MovementControl(object):
         self.friction_z = 0.85
         self.movelocal = 1
         self.can_fly = True
+
+    def view_toggle(self, to_state=None):
+        if to_state is not None:
+            self.cabin_view = not to_state
+        if self.cabin_view:
+            camera.localPosition = (-5, 0, 1)
+            self.cabin_view = False
+        else:
+            camera.localPosition = (0, 0, 0)
+            self.cabin_view = True
 
     def update_screen_size(self):
         self.W = R.getWindowWidth()
@@ -108,7 +123,7 @@ class MovementControl(object):
                 self.mz = max(self.mz, self.initial_v_z)
                 print('Ascending', self.obj.position.z, self.obj.worldPosition.z)
                 self.mz *= self.accel_z
-                self.mz *= self.friction_z
+        self.mz *= self.friction_z
 
         # Clamping
         if self.mx > self.maxspd:
