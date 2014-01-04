@@ -5,16 +5,18 @@ from mathutils import Vector
 from helpers import get_object  # , search_object
 
 ACTIVATED = G.KX_INPUT_JUST_ACTIVATED
-RELEASED = G.KX_INPUT_JUST_RELEASED
+#RELEASED = G.KX_INPUT_JUST_RELEASED
 ACTIVE = G.KX_INPUT_ACTIVE
-INACTIVE = G.KX_INPUT_NONE
+#INACTIVE = G.KX_INPUT_NONE
 scene = G.getCurrentScene()
+MAX_FLY_HEIGHT = 30.0
 
 # KEY BINDINGS
 kbleft = E.AKEY
 kbright = E.DKEY
 kbup = E.WKEY
 kbdown = E.SKEY
+kbascend = E.SPACEKEY
 
 
 def start_game(walk=False):
@@ -23,27 +25,35 @@ def start_game(walk=False):
     camera.setParent(yaw, False)
     camera.position = (0, 0, 0)
     scene.active_camera = camera
+    if walk:
+        movement_controls.can_fly = False
+        movement_controls.maxspd = 5.0
+        movement_controls.sensitivity = 0.002
 
 
 class MovementControl(object):
     def __init__(self):
         print('MovementControl', scene)
+        self.update_screen_size()
         #self.speed = 0.08
-        self.sensitivity = 0.002
+        self.sensitivity = 0.0005
         self.smooth = 0.7
         self.obj = cont.owner
-        self.update_screen_size()
         # center mouse on first frame, create temp variables
         R.setMousePosition(self.w + 2, self.h + 1)
         self.old_x = 0.0
         self.old_y = 0.0
-        self.moveinit = 1
         self.mx = 0.0
         self.my = 0.0
-        self.accel = 2.0
-        self.maxspd = 5.0
+        self.mz = 0.0
+        self.accel = 3.0
+        self.initial_v_z = 1.5
+        self.accel_z = 1.1
+        self.maxspd = 25.0
         self.friction = 0.75
+        self.friction_z = 0.85
         self.movelocal = 1
+        self.can_fly = True
 
     def update_screen_size(self):
         self.W = R.getWindowWidth()
@@ -90,6 +100,16 @@ class MovementControl(object):
         else:
             self.my *= self.friction
 
+        self.mz = self.obj.localLinearVelocity.z
+        if self.can_fly:
+            if kevents[kbascend] \
+               and abs(self.mz) < self.maxspd \
+               and self.obj.worldPosition.z < MAX_FLY_HEIGHT:
+                self.mz = max(self.mz, self.initial_v_z)
+                print('Ascending', self.obj.position.z, self.obj.worldPosition.z)
+                self.mz *= self.accel_z
+                self.mz *= self.friction_z
+
         # Clamping
         if self.mx > self.maxspd:
             self.mx = self.maxspd
@@ -101,8 +121,13 @@ class MovementControl(object):
         elif self.my < -self.maxspd:
             self.my = -self.maxspd
 
+        if self.mz > self.maxspd:
+            self.mz = self.maxspd
+        elif self.mz < -self.maxspd:
+            self.mz = -self.maxspd
+
         # Actual movement
-        self.obj.setLinearVelocity([self.my, self.mx, self.obj.getLinearVelocity()[2]], self.movelocal)
+        self.obj.setLinearVelocity((self.my, self.mx, self.mz), self.movelocal)
 
 
 def change_focus(cont):
