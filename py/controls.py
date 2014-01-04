@@ -1,35 +1,23 @@
 from bge import logic as G
 from bge import render as R
-from bge import events
+from bge import events as E
 from mathutils import Vector
+from helpers import get_object  # , search_object
+
 ACTIVATED = G.KX_INPUT_JUST_ACTIVATED
 RELEASED = G.KX_INPUT_JUST_RELEASED
 ACTIVE = G.KX_INPUT_ACTIVE
 INACTIVE = G.KX_INPUT_NONE
-from helpers import get_object, search_object
-mouse = G.mouse
-mouse_events = mouse.events
-keyboard = G.keyboard
+scene = G.getCurrentScene()
+
+# KEY BINDINGS
+kbleft = E.AKEY
+kbright = E.DKEY
+kbup = E.WKEY
+kbdown = E.SKEY
 
 
-def open_menu():
-    scene.suspend()
-    G.addScene('HUD', 1)
-    camera['focalDepth'] = 0.1
-    menu = search_object('hud_menu')
-    if menu:
-        menu.setVisible(True, True)
-        scenes = {_.name: _ for _ in G.getSceneList()}
-        scenes['HUD'].resume()
-
-
-def start_game():
-    scenes = {_.name: _ for _ in G.getSceneList()}
-    scenes['HUD'].suspend()
-    scene.resume()
-    menu = search_object('hud_menu')
-    menu.setVisible(False, True)
-    camera['focalDepth'] = 1.0
+def start_game(walk=False):
     print('Setting up the camera')
     yaw.setParent(ply, False)
     camera.setParent(yaw, False)
@@ -37,112 +25,93 @@ def start_game():
     scene.active_camera = camera
 
 
-def mouse_look(cont):
-    #Blender Game Engine 2.55 Simple Camera Look
-    #Created by Mike Pan: mikepan.com
+class MovementControl(object):
+    def __init__(self):
+        print('MovementControl', scene)
+        #self.speed = 0.08
+        self.sensitivity = 0.002
+        self.smooth = 0.7
+        self.obj = cont.owner
+        self.update_screen_size()
+        # center mouse on first frame, create temp variables
+        R.setMousePosition(self.w + 2, self.h + 1)
+        self.old_x = 0.0
+        self.old_y = 0.0
+        self.moveinit = 1
+        self.mx = 0.0
+        self.my = 0.0
+        self.accel = 2.0
+        self.maxspd = 5.0
+        self.friction = 0.75
+        self.movelocal = 1
 
-    # Use mouse to look around
-    # W,A,S,D key to walk around
-    # E and C key to ascend and decend
+    def update_screen_size(self):
+        self.W = R.getWindowWidth()
+        self.H = R.getWindowHeight()
+        self.size = Vector((self.W, self.H))
+        self.w = self.W // 2
+        self.h = self.H // 2
+        self.screen_center = (self.w, self.h)
 
-    #speed = 0.08				# walk speed
-    sensitivity = 0.002		# mouse sensitivity
-    smooth = 0.7			# mouse smoothing (0.0 - 0.99)
+    def update(self):
+        kevents = G.keyboard.events
+        scrc = Vector(self.screen_center)
+        _pos = Vector(G.mouse.position)
+        mpos = Vector((_pos.x * self.size.x, _pos.y * self.size.y))
 
-    owner = cont.owner
-    Mouse = cont.sensors['Mouse']
-
-    w = R.getWindowWidth()//2
-    h = R.getWindowHeight()//2
-    screen_center = (w, h)
-
-    # center mouse on first frame, create temp variables
-    if 'oldX' not in owner:
-        print('oldX' not in owner)
-        R.setMousePosition(w + 1, h + 1)
-        owner['oldX'] = 0.0
-        owner['oldY'] = 0.0
-    else:
-
-        scrc = Vector(screen_center)
-        mpos = Vector(Mouse.position)
-
-        x = scrc.x-mpos.x
-        y = scrc.y-mpos.y
+        x = scrc.x - mpos[0]
+        y = scrc.y - mpos[1]
 
         # Smooth movement
-        owner['oldX'] = (owner['oldX']*smooth + x*(1.0-smooth))
-        owner['oldY'] = (owner['oldY']*smooth + y*(1.0-smooth))
+        self.old_x = (self.old_x * self.smooth + x * (1.0 - self.smooth))
+        self.old_y = (self.old_y * self.smooth + y * (1.0 - self.smooth))
 
-        x = owner['oldX'] * sensitivity
-        y = owner['oldY'] * sensitivity
+        x = self.old_x * self.sensitivity
+        y = self.old_y * self.sensitivity
 
         # set the values
-        owner.applyRotation([0, 0, x], False)
-        yaw.applyRotation([0, -y, 0], True)
+        self.obj.applyRotation([0, 0, x], False)
+        yaw.applyRotation([0, - y, 0], True)
 
         # Center mouse in game window
-        R.setMousePosition(*screen_center)
+        R.setMousePosition(*self.screen_center)
 
-    keyboard = G.keyboard.events
+        if kevents[kbleft]:
+            self.mx += self.accel
+        elif kevents[kbright]:
+            self.mx -= self.accel
+        else:
+            self.mx *= self.friction
 
-    # KEY BINDINGS
+        if kevents[kbup]:
+            self.my += self.accel
+        elif kevents[kbdown]:
+            self.my -= self.accel
+        else:
+            self.my *= self.friction
 
-    kbleft = events.AKEY  # Replace these with others, if you wish
-    kbright = events.DKEY  # An example would be 'events.WKEY, DKEY, SKEY, and AKEY
-    kbup = events.WKEY
-    kbdown = events.SKEY
-    kb_q = events.QKEY
+        # Clamping
+        if self.mx > self.maxspd:
+            self.mx = self.maxspd
+        elif self.mx < -self.maxspd:
+            self.mx = -self.maxspd
 
-    ##################
+        if self.my > self.maxspd:
+            self.my = self.maxspd
+        elif self.my < -self.maxspd:
+            self.my = -self.maxspd
 
-    if keyboard[kb_q]:
-        open_menu()
-
-    if not 'moveinit' in owner:
-        owner['moveinit'] = 1
-        owner['mx'] = 0.0
-        owner['my'] = 0.0
-        owner['accel'] = 2.0      # Acceleration
-        owner['maxspd'] = 5.0    # Top speed
-        owner['friction'] = 0.75   # Friction percentage; set to 0.0 for immediate stop
-        owner['movelocal'] = 1    # Move on local axis?
-
-    if keyboard[kbleft]:
-        owner['mx'] += owner['accel']
-    elif keyboard[kbright]:
-        owner['mx'] -= owner['accel']
-    else:
-        owner['mx'] *= owner['friction']
-
-    if keyboard[kbup]:
-        owner['my'] += owner['accel']
-    elif keyboard[kbdown]:
-        owner['my'] -= owner['accel']
-    else:
-        owner['my'] *= owner['friction']
-
-    # Clamping
-    if owner['mx'] > owner['maxspd']:
-        owner['mx'] = owner['maxspd']
-    elif owner['mx'] < -owner['maxspd']:
-        owner['mx'] = -owner['maxspd']
-
-    if owner['my'] > owner['maxspd']:
-        owner['my'] = owner['maxspd']
-    elif owner['my'] < -owner['maxspd']:
-        owner['my'] = -owner['maxspd']
-
-    # Actual movement
-    owner.setLinearVelocity([owner['my'], owner['mx'], owner.getLinearVelocity()[2]], owner['movelocal'])
+        # Actual movement
+        self.obj.setLinearVelocity([self.my, self.mx, self.obj.getLinearVelocity()[2]], self.movelocal)
 
 
 def change_focus(cont):
+    mevents = G.mouse.events
     #if mousewheel moves down, bring focus closer
-    if G.mouse.events[events.WHEELDOWNMOUSE] in (ACTIVE, ACTIVATED):
+    if mevents[E.WHEELDOWNMOUSE] in (ACTIVE, ACTIVATED):
         camera['focalDepth'] -= 0.005
     #if mousewheel moves up, make focus further
-    if G.mouse.events[events.WHEELUPMOUSE] in (ACTIVE, ACTIVATED):
+    if mevents[E.WHEELUPMOUSE] in (ACTIVE, ACTIVATED):
         camera['focalDepth'] += 0.005
     camera['focalDepth'] = camera['focalDepth'] < 0.1 and 0.1 or camera['focalDepth']
     camera['focalDepth'] = camera['focalDepth'] > 1.0 and 1.0 or camera['focalDepth']
@@ -153,4 +122,8 @@ if scene.name == 'City':
     cont = G.getCurrentController()
     yaw = get_object('player_yaw')
     ply = cont.owner
-    open_menu()
+    movement_controls = MovementControl()
+    G.addScene('HUD', 1)
+
+    def update():
+        movement_controls.update()
