@@ -2,7 +2,7 @@ from bge import logic as G
 from bge import render as R
 from bge import events as E
 from mathutils import Vector
-from helpers import get_object  # , search_object
+from helpers import get_object
 
 ACTIVATED = G.KX_INPUT_JUST_ACTIVATED
 #RELEASED = G.KX_INPUT_JUST_RELEASED
@@ -21,44 +21,25 @@ kbascend = E.SPACEKEY
 
 def start_game(walk=False):
     print('Setting up the camera')
-    yaw.setParent(ply, False)
-    camera.setParent(yaw, False)
+    camera.setParent(ply, False)
     scene.active_camera = camera
-    if walk and movement_controls.can_fly:
-        movement_controls.can_fly = False
-        movement_controls.maxspd = 5.0
-        movement_controls.sensitivity = 0.002
-    elif not walk and not movement_controls.can_fly:
-        movement_controls.init_fly_settings()
+    movement_controls.init()
     movement_controls.view_toggle(True)
 
 
 class MovementControl(object):
     def __init__(self):
         print('MovementControl', scene)
-        self.init_fly_settings()
+        self.init()
 
-    def init_fly_settings(self):
+    def init(self):
         self.update_screen_size()
-        #self.speed = 0.08
         self.sensitivity = 0.0005
         self.smooth = 0.7
-        self.obj = cont.owner
-        # center mouse on first frame, create temp variables
+        self.obj = ply
         R.setMousePosition(self.w + 2, self.h + 1)
-        self.old_x = 0.0
-        self.old_y = 0.0
-        self.mx = 0.0
-        self.my = 0.0
-        self.mz = 0.0
-        self.accel = 3.0
-        self.initial_v_z = 1.5
-        self.accel_z = 1.1
-        self.maxspd = 25.0
-        self.friction = 0.75
-        self.friction_z = 0.85
-        self.movelocal = 1
-        self.can_fly = True
+        self.x = self.obj.localOrientation.to_euler().x
+        self.y = self.obj.localOrientation.to_euler().y
 
     def view_toggle(self, to_state=None):
         if to_state is not None:
@@ -78,71 +59,41 @@ class MovementControl(object):
         self.h = self.H // 2
         self.screen_center = (self.w, self.h)
 
+    def apply_cap(self):
+        self.cap = 1
+        if self.y < - self.cap:
+            self.y = - self.cap
+        if self.y > self.cap:
+            self.y = self.cap
+
     def update(self):
-        kevents = G.keyboard.events
         scrc = Vector(self.screen_center)
         _pos = Vector(G.mouse.position)
         mpos = Vector((_pos.x * self.size.x, _pos.y * self.size.y))
 
-        x = scrc.x - mpos[0]
-        y = scrc.y - mpos[1]
-
-        # Smooth movement
-        self.old_x = (self.old_x * self.smooth + x * (1.0 - self.smooth))
-        self.old_y = (self.old_y * self.smooth + y * (1.0 - self.smooth))
-
-        x = self.old_x * self.sensitivity
-        y = self.old_y * self.sensitivity
+        self.x += (scrc.x - mpos[0]) * self.sensitivity
+        self.y += (scrc.y - mpos[1]) * self.sensitivity
+        self.apply_cap()
 
         # set the values
-        self.obj.applyRotation([0, 0, x], False)
-        yaw.applyRotation([0, - y, 0], True)
+        ori = self.obj.localOrientation.to_euler()
+        ori.y = - self.y
+        ori.z = self.x
+        self.obj.localOrientation = ori.to_matrix()
 
         # Center mouse in game window
         R.setMousePosition(*self.screen_center)
 
-        if kevents[kbleft]:
-            self.mx += self.accel
-        elif kevents[kbright]:
-            self.mx -= self.accel
-        else:
-            self.mx *= self.friction
+        face_vect = self.obj.getAxisVect((1, 0, 0))
+        if abs(self.obj.worldPosition.z) > MAX_FLY_HEIGHT:
+            self.obj.applyImpulse(self.obj.position, (0, 0, - self.obj.worldPosition.z))
+            return
 
-        if kevents[kbup]:
-            self.my += self.accel
-        elif kevents[kbdown]:
-            self.my -= self.accel
-        else:
-            self.my *= self.friction
-
-        self.mz = self.obj.localLinearVelocity.z
-        if self.can_fly:
-            if kevents[kbascend] \
-               and abs(self.mz) < self.maxspd \
-               and self.obj.worldPosition.z < MAX_FLY_HEIGHT:
-                self.mz = max(self.mz, self.initial_v_z)
-                print('Ascending', self.obj.position.z, self.obj.worldPosition.z)
-                self.mz *= self.accel_z
-        self.mz *= self.friction_z
-
-        # Clamping
-        if self.mx > self.maxspd:
-            self.mx = self.maxspd
-        elif self.mx < -self.maxspd:
-            self.mx = -self.maxspd
-
-        if self.my > self.maxspd:
-            self.my = self.maxspd
-        elif self.my < -self.maxspd:
-            self.my = -self.maxspd
-
-        if self.mz > self.maxspd:
-            self.mz = self.maxspd
-        elif self.mz < -self.maxspd:
-            self.mz = -self.maxspd
-
-        # Actual movement
-        self.obj.setLinearVelocity((self.my, self.mx, self.mz), self.movelocal)
+        if G.keyboard.events[kbdown]:
+            self.obj.localLinearVelocity *= 0.01
+        if G.keyboard.events[kbup]:
+            self.obj.applyImpulse(self.obj.position,
+                                  (5 * face_vect.x, 5 * face_vect.y, 30 * face_vect.z))
 
 
 def change_focus(cont):
@@ -160,7 +111,6 @@ scene = G.getCurrentScene()
 if scene.name == 'City':
     camera = get_object('camera')
     cont = G.getCurrentController()
-    yaw = get_object('player_yaw')
     ply = cont.owner
     movement_controls = MovementControl()
     G.addScene('HUD', 1)
