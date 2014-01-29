@@ -18,10 +18,10 @@ uniform float focalDepth;  //external focal point value, but you may use autofoc
 int samples = 3; //samples on the first ring
 int rings = 5; //ring count
 
-bool autofocus = false; //use autofocus in shader? disable if you use external focalDepth value
+bool autofocus = true; //use autofocus in shader? disable if you use external focalDepth value
 vec2 focus = vec2(0.5,0.5); // autofocus point on screen (0.0,0.0 - left lower corner, 1.0,1.0 - upper right)
 float range = 10.0; //focal range
-float maxblur = 1.25; //clamp value of max blur
+float maxblur = 1.5; //clamp value of max blur
 
 float threshold = 0.5; //highlight threshold;
 float gain = 15.0; //highlight gain;
@@ -35,52 +35,7 @@ float namount = 0.0001; //dither amount
 bool depthblur = false; //blur the depth buffer?
 float dbsize = 1.0; //depthblursize
 
-/*
-next part is experimental
-not looking good with small sample and ring count
-looks okay starting from samples = 4, rings = 4
-*/
-
-bool pentagon = false; //use pentagon as bokeh shape?
-float feather = 0.4; //pentagon shape feather
-
 //------------------------------------------
-
-
-float penta(vec2 coords) //pentagonal shape
-{
-	float scale = float(rings) - 1.3;
-	vec4  HS0 = vec4( 1.0,         0.0,         0.0,  1.0);
-	vec4  HS1 = vec4( 0.309016994, 0.951056516, 0.0,  1.0);
-	vec4  HS2 = vec4(-0.809016994, 0.587785252, 0.0,  1.0);
-	vec4  HS3 = vec4(-0.809016994,-0.587785252, 0.0,  1.0);
-	vec4  HS4 = vec4( 0.309016994,-0.951056516, 0.0,  1.0);
-	vec4  HS5 = vec4( 0.0        ,0.0         , 1.0,  1.0);
-	
-	vec4  one = vec4( 1.0 );
-	
-	vec4 P = vec4((coords),vec2(scale, scale)); 
-	
-	vec4 dist = vec4(0.0);
-	float inorout = -4.0;
-	
-	dist.x = dot( P, HS0 );
-	dist.y = dot( P, HS1 );
-	dist.z = dot( P, HS2 );
-	dist.w = dot( P, HS3 );
-	
-	dist = smoothstep( -feather, feather, dist );
-	
-	inorout += dot( dist, one );
-	
-	dist.x = dot( P, HS4 );
-	dist.y = HS5.w - abs( P.z );
-	
-	dist = smoothstep( -feather, feather, dist );
-	inorout += dist.x;
-	
-	return clamp( inorout, 0.0, 1.0 );
-}
 
 float bdepth(vec2 coords) //blurring depth
 {
@@ -146,7 +101,6 @@ vec2 rand(in vec2 coord) //generating noise/pattern texture for dithering
 
 void main() 
 {
-	
 	float depth = texture2D(bgl_DepthTexture,gl_TexCoord[0].xy).x;
 	float blur = 0.0;
 	
@@ -183,18 +137,13 @@ void main()
 			float pw = (cos(float(j)*step)*float(i));
 			float ph = (sin(float(j)*step)*float(i));
 			float p = 1.0;
-			if (pentagon)
-			{ 
-			p = penta(vec2(pw,ph));
-			}
 			col += color(gl_TexCoord[0].xy + vec2(pw*w,ph*h),blur)*mix(1.0,(float(i))/(float(rings)),bias)*p;  
 			s += 1.0*mix(1.0,(float(i))/(float(rings)),bias)*p;   
 		}
 	}
 	
 	
-	col /= s;   
-	
-	gl_FragColor.rgb = col;
+	col /= s;
+    gl_FragColor.rgb = col;
 	gl_FragColor.a = 1.0;
 }
