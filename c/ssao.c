@@ -41,8 +41,8 @@ float gdisplace = 0.4; //gauss bell center
 float aowidth = 8.0; //gauss bell width
 
 bool mist = true; //use mist?
-float miststart = 0.0; //mist start
-float mistend = 16.0; //mist end
+float miststart = 10.0; //mist start
+float mistend = 1000.0; //mist end
 
 bool onlyAO = false; //use only ambient occlusion pass?
 float lumInfluence = 0.6; //how much luminance affects occlusion
@@ -151,7 +151,7 @@ void main(void)
 	
 	if (mist)
 	{
-	ao = mix(ao, 1.0,doMist());
+	ao = mix(ao, 0.5,doMist());
 	}
 	
 	vec3 color = texture2D(bgl_RenderedTexture,texCoord).rgb;

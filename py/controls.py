@@ -3,6 +3,7 @@ from bge import render as R
 from bge import events as E
 from mathutils import Vector
 from helpers import get_object
+import math
 
 ACTIVATED = G.KX_INPUT_JUST_ACTIVATED
 #RELEASED = G.KX_INPUT_JUST_RELEASED
@@ -12,19 +13,14 @@ scene = G.getCurrentScene()
 MAX_FLY_HEIGHT = 30.0
 
 # KEY BINDINGS
-kbleft = E.AKEY
-kbright = E.DKEY
 kbup = E.WKEY
 kbdown = E.SKEY
-kbascend = E.SPACEKEY
-
-
-def start_game(walk=False):
-    print('Setting up the camera')
-    camera.setParent(ply, False)
-    scene.active_camera = camera
-    movement_controls.init()
-    movement_controls.view_toggle(True)
+kbleft = E.AKEY
+kbright = E.DKEY
+kb_rleft = E.LEFTARROWKEY
+kb_rright = E.RIGHTARROWKEY
+kb_pup = E.UPARROWKEY
+kb_pdown = E.DOWNARROWKEY
 
 
 class MovementControl(object):
@@ -33,67 +29,123 @@ class MovementControl(object):
         self.init()
 
     def init(self):
-        self.update_screen_size()
-        self.sensitivity = 0.0005
-        self.smooth = 0.7
+        self.base_torq = 25
+        self.minpower = 40.0
+        self.power = 0.0
+        self.maxpower = 120.0
+        self.maxspeed = 15.0
+        self.vspeed = 0.0
+        self.speed = 0.0
+        self.lift = 0.0
+        self.maxlift = 100.0
+        self.pitch = 0.0
+        self.thrust = 0.0
+        self.bank = 0.0
+        self.thrustpitchfactor = 0.0
+        self.status = ''
+        self.crashed = False
+        self.rollfactor = 0.6
+        self.rolltorq = 0
+        self.pitchfactor = 16.0
+        self.pitchtorq = 0.0
+        self.yawfactor = 1.0
+        self.yawtorq = 1.0
+        self.onground = False
+
         self.obj = ply
-        R.setMousePosition(self.w + 2, self.h + 1)
-        self.x = self.obj.localOrientation.to_euler().x
-        self.y = self.obj.localOrientation.to_euler().y
-
-    def view_toggle(self, to_state=None):
-        if to_state is not None:
-            self.cabin_view = not to_state
-        if self.cabin_view:
-            camera.localPosition = (-5, 0, 1)
-            self.cabin_view = False
-        else:
-            camera.localPosition = (0, 0, 0)
-            self.cabin_view = True
-
-    def update_screen_size(self):
-        self.W = R.getWindowWidth()
-        self.H = R.getWindowHeight()
-        self.size = Vector((self.W, self.H))
-        self.w = self.W // 2
-        self.h = self.H // 2
-        self.screen_center = (self.w, self.h)
-
-    def apply_cap(self):
-        self.cap = 1
-        if self.y < - self.cap:
-            self.y = - self.cap
-        if self.y > self.cap:
-            self.y = self.cap
+        self.cont = cont
+        self.keeper = scene.objects["camerakeeper"]
 
     def update(self):
-        scrc = Vector(self.screen_center)
-        _pos = Vector(G.mouse.position)
-        mpos = Vector((_pos.x * self.size.x, _pos.y * self.size.y))
+        self.keeper.worldPosition = self.obj.worldPosition
+        matrix_rotation = self.obj.worldOrientation
+        euler_rotation = matrix_rotation.to_euler()
+        degrees_rotation = [math.degrees(a) for a in euler_rotation]
 
-        self.x += (scrc.x - mpos[0]) * self.sensitivity
-        self.y += (scrc.y - mpos[1]) * self.sensitivity
-        self.apply_cap()
+        pitch = int(degrees_rotation[0])
+        bank = int(degrees_rotation[1])
+        #yaw = int(degrees_rotation[2])
 
-        # set the values
-        ori = self.obj.localOrientation.to_euler()
-        ori.y = - self.y
-        ori.z = self.x
-        self.obj.localOrientation = ori.to_matrix()
+        self.pitch = pitch
+        self.bank = bank
 
-        # Center mouse in game window
-        R.setMousePosition(*self.screen_center)
+        pitchcube = scene.objects["pitchcube"]
+        thrustpitchfactor = pitchcube.worldPosition[2] - self.obj.worldPosition[2]
+        self.thrustpitchfactor = thrustpitchfactor * 10
 
-        face_vect = self.obj.getAxisVect((1, 0, 0))
-        if abs(self.obj.worldPosition.z) > MAX_FLY_HEIGHT:
-            self.obj.applyImpulse(self.obj.position, (0, 0, - self.obj.worldPosition.z))
-            return
+        localvelocity = self.obj.getLinearVelocity(True)
+        worldvelocity = self.obj.getLinearVelocity(False)
 
-        if G.keyboard.events[kbdown]:
-            self.obj.localLinearVelocity *= 0.01
-        if G.keyboard.events[kbup]:
-            self.obj.applyImpulse(self.obj.position,
-                                  (5 * face_vect.x, 5 * face_vect.y, 30 * face_vect.z))
+        speed = localvelocity[1]
+        vspeed = worldvelocity[2]
+        self.speed = speed
+        self.vspeed = vspeed
+
+        key = G.keyboard.events
+
+        if self.crashed is False:
+            lift = localvelocity[1] * 9.7
+            self.thrust = self.power
+            self.thrust = self.thrust - self.thrustpitchfactor
+            if lift < 0:
+                lift = 0
+            if lift > self.maxlift:
+                lift = self.maxlift
+            self.lift = lift
+            self.obj.applyForce([0, 0, lift], 0)
+
+            if self.power < self.minpower:
+                self.power = self.minpower
+
+            if key[kbup] == 2:
+                if self.power < self.maxpower:
+                    self.power += 1
+            if key[kbdown] == 2:
+                if self.power > self.minpower:
+                    self.power -= 1
+
+            self.obj.applyForce([0, self.thrust, 0], 1)
+            self.thrust = self.thrust - self.thrustpitchfactor
+            if self.onground is False:
+                if self.thrust < 60:
+                    self.thrust = 60
+            self.rolltorq = self.rollfactor * self.speed
+            if self.rolltorq < 4:
+                self.rolltorq = 4
+            self.pitchtorq = self.pitchfactor - self.speed
+            if self.pitchtorq < 4:
+                self.pitchtorq = 4
+
+            self.yawtorq = (self.power / 10) - self.yawfactor - self.speed
+            if self.onground is True:
+                if self.yawtorq < 18:
+                    self.yawtorq = 18
+            if self.onground is False:
+                if self.yawtorq < 9:
+                    self.yawtorq = 9
+            torq = self.base_torq - self.speed
+            if key[kb_rleft] == 2:
+                self.obj.applyTorque([0.0, - self.rolltorq * 2, 0.0], 1)
+            if key[kb_rright] == 2:
+                self.obj.applyTorque([0.0, self.rolltorq * 2, 0.0], 1)
+            if key[kb_pup] == 2:
+                self.obj.applyTorque([- self.pitchtorq / 1.5, 0.0, 0.0], 1)
+            if key[kb_pdown] == 2:
+                self.obj.applyTorque([self.pitchtorq / 1.5, 0.0, 0.0], 1)
+            if key[kbleft] == 2:
+                self.obj.applyTorque([0.0, 0.0, torq], 1)
+            if key[kbright] == 2:
+                self.obj.applyTorque([0.0, 0.0, - torq], 1)
+            if bank < 0 and bank > -180.0001:
+                self.obj.applyTorque([0.0, 0.0, - bank / 15], 1)
+                self.obj.applyTorque([0.0, -bank / 12, 0.0], 1)
+            if bank > 0 and bank < 180.0001:
+                self.obj.applyTorque([0.0, 0.0, - bank / 15], 1)
+                self.obj.applyTorque([0.0, -bank / 12, 0.0], 1)
+            if pitch > 0.001 and pitch < 90:
+                self.obj.applyTorque([- pitch / 12, 0.0, 0.0], 1)
+            if pitch < 0.001 and pitch > -90:
+                self.obj.applyTorque([- pitch / 12, 0.0, 0.0], 1)
 
 
 def change_focus(cont):
@@ -109,7 +161,8 @@ def change_focus(cont):
 
 scene = G.getCurrentScene()
 if scene.name == 'City':
-    camera = get_object('camera')
+    camera = get_object('Camera')
+    scene.active_camera = camera
     cont = G.getCurrentController()
     ply = cont.owner
     movement_controls = MovementControl()

@@ -3,6 +3,7 @@ import controls
 from bge import events as E
 from bge import logic as G
 from bge import render as R
+from mathutils import Vector
 RELEASED = G.KX_INPUT_JUST_RELEASED
 R.setMousePosition(R.getWindowWidth()//2, R.getWindowHeight()//2)
 
@@ -13,7 +14,7 @@ class HUD(object):
         # hotkeys
         self.kh_menu = E.QKEY
         self.kh_view_toggle = E.ZKEY
-        # 
+        #
         self.cursor = search_object('cursor')
         self.mouse = self.cursor.sensors['mouse_over']
         self.menu_highlight = get_object('menu_highlight')
@@ -24,6 +25,14 @@ class HUD(object):
             raise Exception('Cannot proceed')
         print('HUD', self.scene)
         self.toggle_menu(True)
+
+    def update_screen_size(self):
+        self.W = R.getWindowWidth()
+        self.H = R.getWindowHeight()
+        self.size = Vector((self.W, self.H))
+        self.w = self.W // 2
+        self.h = self.H // 2
+        self.screen_center = (self.w, self.h)
 
     def toggle_menu(self, to_state=None):
         if to_state is not None:
@@ -46,10 +55,13 @@ class HUD(object):
             self.menu.setVisible(True, True)
             scenes['HUD'].resume()
             self.is_open = True
+        self.update_screen_size()
 
     def update(self):
         if not self.is_open:
             # menu's not open, listen to in-game hotkeys
+            R.setMousePosition(*self.screen_center)
+            self.cursor.localPosition = self.mouse.raySource
             if G.keyboard.events[self.kh_menu] == RELEASED:
                 self.toggle_menu()
             elif G.keyboard.events[self.kh_view_toggle] == RELEASED:
@@ -66,13 +78,7 @@ class HUD(object):
                 print('mouse button', obj)
                 if obj.name == 'choose_fly':
                     try:
-                        controls.start_game()
-                        self.toggle_menu(False)
-                    except Exception as e:
-                        print(e)
-                elif obj.name == 'choose_walk':
-                    try:
-                        controls.start_game(walk=True)
+                        #controls.start_game()
                         self.toggle_menu(False)
                     except Exception as e:
                         print(e)
