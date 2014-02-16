@@ -147,19 +147,20 @@ var shader = {
             "vec3 normalTex = texture2D( tNormal, vUv * offsetRepeatNormal.zw).xyz * 2.0 - 1.0;",
             "normalTex.xy *= uNormalScale;",
             "normalTex = normalize( normalTex );",
+            "vec4 diffuseTex = normalize(texture2D( tDiffuse, vUv * offsetRepeatDiffuse.zw));",
 
             "if( enableDiffuse ) {",
 
                 "#ifdef GAMMA_INPUT",
 
-                    "vec4 texelColor = texture2D( tDiffuse, vUv );",
+                    "vec4 texelColor = diffuseTex;",
                     "texelColor.xyz *= texelColor.xyz;",
 
                     "gl_FragColor = gl_FragColor * texelColor;",
 
                 "#else",
 
-                    "gl_FragColor = gl_FragColor * texture2D( tDiffuse, vUv * offsetRepeatDiffuse.zw);",
+                    "gl_FragColor = gl_FragColor * diffuseTex;",
 
                 "#endif",
 
@@ -187,6 +188,12 @@ var shader = {
                 "specmask = texture2D( tSpecular, vUv * offsetRepeatSpecular.zw).w;",
             "}",
 
+            "if( specmask > 0.0101 ) {",
+                "gl_FragColor.xyz = specularTex * 1.5;",
+                //"normalTex = normalize(specularTex); //vec3(0.0, 0.0, 0.0);",
+                "normalTex = diffuseTex.xyz; //vec3(0.0, 0.0, 0.0);",
+            "}",
+
             "mat3 tsb = mat3( normalize( vTangent ), normalize( vBinormal ), normalize( vNormal ) );",
             "vec3 finalNormal = tsb * normalTex;",
 
@@ -198,13 +205,6 @@ var shader = {
 
             "vec3 normal = normalize( finalNormal );",
             "vec3 viewPosition = normalize( vViewPosition );",
-
-            "if( specmask > 0.001 ) {",
-                "gl_FragColor.xyz = specularTex * 1.5;",
-                //"specularTex = vec3(1.0, 1.0, 1.0);",
-                "finalNormal = specularTex; //vec3(0.0, 0.0, 0.0);",
-                "normalTex = specularTex; //vec3(0.0, 0.0, 0.0);",
-            "}",
 
             // point lights
 

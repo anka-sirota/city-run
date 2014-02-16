@@ -1,6 +1,6 @@
 var camera, scene, renderer, controls, light, buildings_geometry, glowscene;
-var ccolor = 0x0f0f1a;
-var spec_ccolor = 0x0f0f1f;
+var ccolor = 0x05050a;
+var spec_ccolor = 0xffffff;
 var SCREEN_HEIGHT = window.innerHeight;
 var SCREEN_WIDTH = window.innerWidth;
 var manager = new THREE.LoadingManager();
@@ -9,22 +9,6 @@ manager.onProgress = function (item, loaded, total) {
 };
 var image_loader = new THREE.ImageLoader(manager);
 var geometry_loader = new THREE.JSONLoader(manager);
-
-function get_shader_text(url) {
-    console.log('get_shader_text', url);
-    var vtext;
-    $.ajax({
-        type: "GET",
-        url: url,
-        dataType: "text",
-        async: false,
-        timeout: 30000,
-    }).done( function(text) {
-        console.log(arguments);
-        vtext = text;
-    });
-    return vtext;
-}
 
 function load_texture(url) {
     var t = new THREE.ImageUtils.loadTexture(url);
@@ -78,6 +62,7 @@ function init() {
     glowscene.add(new THREE.AmbientLight(0xffffff));
     glowscene.add(new THREE.AmbientLight(0xffffff));
     glowscene.add(new THREE.AmbientLight(0xffffff));
+    glowscene.add(new THREE.AmbientLight(0xffffff));
     glowscene.fog = new THREE.FogExp2(ccolor, 0.008);
     glowcamera = new THREE.PerspectiveCamera( 75, SCREEN_WIDTH / SCREEN_HEIGHT, 1, 1000 );
     glowcamera.position = camera.position;
@@ -85,10 +70,12 @@ function init() {
 
 function animate() {
     requestAnimationFrame(animate);
-    //renderer.render(glowscene, camera);
     controls.update(1);
     glowcomposer.render();
     finalcomposer.render();
+    /*
+    renderer.render(glowscene, camera);
+    */
 }
 
 
@@ -117,7 +104,7 @@ function setup_material() {
     uniforms["offsetRepeatSpecular"].value.set(0, 0, 1, 1);
     uniforms["specular"].value.setHex(spec_ccolor);
     uniforms["enableSpecular" ].value = true;
-    uniforms["shininess"].value = 200;
+    uniforms["shininess"].value = 300;
     uniforms["useRefract" ].value = true;
 
     console.log(shader);
